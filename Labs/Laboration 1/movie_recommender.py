@@ -12,9 +12,8 @@ class MovieRecommender:
     def __init__(self, 
                  min_df=13, 
                  ngram_range=(1,2), 
-                 max_features=115_000, 
                  n_components=115, 
-                 top_n=10, 
+                 top_n=5, 
                  alpha=0.04, 
                  diversify=True, 
                  n_clusters=2):
@@ -26,7 +25,6 @@ class MovieRecommender:
 
         self.min_df = min_df
         self.ngram_range = ngram_range
-        self.max_features = max_features
         self.n_components = n_components
         self.top_n = top_n
         self.alpha = alpha
@@ -44,7 +42,7 @@ class MovieRecommender:
         self.item_map = None
 
     def load_data(self, movies_df, ratings_df, tags_df, links_df):
-        self.movies_df = movies_df.copy()
+        self.movies_df = movies_df.copy().reset_index(drop=True)
         self.ratings_df = ratings_df.copy()
         self.tags_df = tags_df.copy()
         self.links_df = links_df.copy()
@@ -89,17 +87,29 @@ class MovieRecommender:
             min_df=self.min_df,
             max_df=0.8,
             ngram_range=self.ngram_range,
-            max_features=self.max_features,
             lowercase=True,
             sublinear_tf=True)
 
-        self.tfidf_matrix = vectorizer.fit_transform(self.movie_profiles_df["movie_profile"])
+        vectorizer.fit(self.movie_profiles_df["movie_profile"])
+        self.tfidf_matrix = vectorizer.transform(self.movie_profiles_df["movie_profile"])
         self.vectorizer = vectorizer
         return self.tfidf_matrix
 
     def build_lsa_matrix(self):
-        svd = TruncatedSVD(n_components=self.n_components)
+        svd = TruncatedSVD(n_components=5000) # ändra till self.n_components? eller 115?
         self.lsa_matrix = svd.fit_transform(self.tfidf_matrix)
+
+        ### DEBUG
+        cum = np.cumsum(svd.explained_variance_ratio_)
+        # hitta antal komponenter för t.ex. 0.6 förklaring
+        k = np.searchsorted(cum, 0.60) + 1
+        print("k for 60% variance:", k) ###
+        total_cum = np.sum(svd.explained_variance_ratio_)
+        print("cum_variance_for_current_n:", total_cum) ###
+        import matplotlib.pyplot as plt
+        plt.plot(cum); plt.xlabel("components"); plt.ylabel("cumulative variance"); plt.grid(True)
+        plt.savefig("cum_variance.png", dpi=150) #####
+
         self.svd = svd
         return self.lsa_matrix
 
@@ -117,12 +127,12 @@ class MovieRecommender:
         self.user_item_matrix = coo_matrix((rating_values, (user_codes, item_codes))).tocsr()
         return self.user_item_matrix
     
-    def get_conf_recommendations(self, movie_index, top_n=50):
+    def get_conf_recommendations(self, movie_index, n_candidates=200):
         target_vector = self.lsa_matrix[movie_index]
         similarities = cosine_similarity(target_vector.reshape(1, -1), self.lsa_matrix).flatten()
         similarities[movie_index] = -np.inf
 
-        top_indices = np.argpartition(similarities, -top_n)[-top_n:]
+        top_indices = np.argpartition(similarities, -n_candidates)[-n_candidates:]
         top_indices = top_indices[np.argsort(similarities[top_indices])[::-1]]
 
         movie_ids = self.movies_df.iloc[top_indices]["movieId"].values
@@ -133,14 +143,14 @@ class MovieRecommender:
             "title": titles,
             "score": similarities[top_indices]})
 
-    def get_colf_recommendations(self, movieId, top_n=50):
+    def get_colf_recommendations(self, movieId, n_candidates=200):
         movie_index = self.item_map[movieId]
 
         item_vectors = self.user_item_matrix.T
         similarities = cosine_similarity(item_vectors[movie_index].reshape(1, -1), item_vectors).flatten()
         similarities[movie_index] = -1
 
-        top_indices = np.argpartition(similarities, -top_n)[-top_n:]
+        top_indices = np.argpartition(similarities, -n_candidates)[-n_candidates:]
         top_indices = top_indices[np.argsort(similarities[top_indices])[::-1]]
 
         movie_ids = self.movies_df.iloc[top_indices]["movieId"].values
@@ -154,11 +164,8 @@ class MovieRecommender:
     def hybrid_recommendations(self, movieId):
         movie_index = self.item_map[movieId]
 
-        conf_df = self.get_conf_recommendations(movie_index, top_n=50)
-        conf_df = conf_df.rename(columns={"score": "conf_score"})
-
-        colf_df = self.get_colf_recommendations(movieId, top_n=50)
-        colf_df = colf_df.rename(columns={"score": "colf_score"})
+        conf_df = self.get_conf_recommendations(movie_index).rename(columns={"score": "conf_score"})
+        colf_df = self.get_colf_recommendations(movieId).rename(columns={"score": "colf_score"})
 
         merged = pd.merge(conf_df, colf_df, on=["movieId", "title"], how="outer")
         merged["conf_score"] = merged["conf_score"].fillna(0)
@@ -168,13 +175,14 @@ class MovieRecommender:
         merged["conf_norm"] = scaler.fit_transform(merged["conf_score"].values.reshape(-1, 1)).flatten()
         merged["colf_norm"] = scaler.fit_transform(merged["colf_score"].values.reshape(-1, 1)).flatten()
 
-        merged["hybrid_score"] = self.alpha * merged["conf_norm"] + (1 - self.alpha) * merged["colf_norm"]
-
-        if self.diversify:
+        merged["hybrid_score"] = (self.alpha * merged["conf_norm"] +(1 - self.alpha) * merged["colf_norm"])
+        merged = merged[merged["conf_score"] > 0].sort_values("hybrid_score", ascending=False).reset_index(drop=True)
+        
+        if self.diversify == True:
             return self.diversify_recommendations(merged)
 
-        merged = merged.sort_values("hybrid_score", ascending=False).head(self.top_n)
-        return merged[["movieId", "title", "hybrid_score"]]
+        merged.index += 1
+        return merged[["movieId", "title", "conf_score", "colf_score", "hybrid_score"]].head(self.top_n)
 
     def recommend_by_title(self, title):
         matches = self.movies_df[self.movies_df["title"].str.lower() == title.lower()]
@@ -191,27 +199,45 @@ class MovieRecommender:
         best_match, _, _ = process.extractOne(user_input, titles)
         return best_match
 
-    def search_titles(self, query):
-        query = query.lower()
-        mask = self.movies_df["title"].str.lower().str.contains(query)
-        return self.movies_df[mask][["movieId", "title"]]
-
     def diversify_recommendations(self, merged_df):
-        vectors = self.lsa_matrix[
-            [self.movies_df.index[self.movies_df["movieId"] == mid][0]
-             for mid in merged_df["movieId"]]]
+        lsa_positions = []
+        for id in merged_df["movieId"].tolist():
+            matches = self.movies_df.index[self.movies_df["movieId"] == id].tolist()
+            lsa_positions.append(int(matches[0]))
 
-        kmeans = KMeans(n_clusters=self.n_clusters, random_state=42)
+        vectors = self.lsa_matrix[lsa_positions]
+        n_candidates = vectors.shape[0]
+        n_clusters_eff = min(self.n_clusters, max(1, n_candidates))
+
+        kmeans = KMeans(n_clusters=n_clusters_eff, random_state=42) # RANDOM STATE!
         labels = kmeans.fit_predict(vectors)
+        merged_df["cluster_label"] = labels
 
         diversified_rows = []
+        grouped = merged_df.groupby("cluster_label")
+        for _, group in grouped:
+            best = group.sort_values("hybrid_score", ascending=False).iloc[0]
+            diversified_rows.append(best)
 
-        for cluster in range(self.n_clusters):
-            cluster_movies = merged_df[labels == cluster]
-            if cluster_movies.empty:
-                continue
+        # Debug: vilka kluster valdes som "best per cluster"?
+        print("\nBLOCK 1\n:")
+        print("DEBUG selected clusters (best per cluster):")
+        for r in diversified_rows:
+            print(int(r["movieId"]), r["title"], "cluster_label:", int(r["cluster_label"]), "hybrid:", r["hybrid_score"])
 
-            best_row = cluster_movies.sort_values("hybrid_score", ascending=False).iloc[0]
-            diversified_rows.append(best_row)
+        selected_ids = set([int(row["movieId"]) for row in diversified_rows])
+        remaining = merged_df[~merged_df["movieId"].isin(selected_ids)].sort_values("hybrid_score", ascending=False)
 
-        return pd.DataFrame(diversified_rows).head(self.top_n)
+        for _, row in remaining.iterrows():
+            if len(diversified_rows) >= self.top_n:
+                break
+            diversified_rows.append(row)
+
+        # DEBUG!!
+        print("\nBLOCK 2\n:")
+        print("DEBUG remaining top 10 (cluster_label, title, hybrid):")
+        print(remaining[["cluster_label","title","hybrid_score"]].head(10))
+
+        result = pd.DataFrame(diversified_rows).sort_values("hybrid_score", ascending=False).reset_index(drop=True)
+        result.index += 1
+        return result[["movieId", "title", "cluster_label", "conf_score", "colf_score", "hybrid_score"]].head(self.top_n) #clusterlabel
