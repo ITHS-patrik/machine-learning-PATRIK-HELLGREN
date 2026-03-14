@@ -11,7 +11,7 @@ from rapidfuzz import process
 class MovieRecommender:
     def __init__(self, 
                  min_df=13, 
-                 ngram_range=(1,2), 
+                 ngram_range=(1,3), 
                  n_components=115, 
                  top_n=5, 
                  alpha=0.04, 
@@ -51,8 +51,7 @@ class MovieRecommender:
     def build_movie_profile(self):
         tags_per_movie = (
             self.tags_df.groupby("movieId")["tag"]
-            .apply(lambda tags: " ".join(str(tag).lower() for tag in tags))
-            .to_dict())
+            .apply(lambda tags: " ".join(str(tag).lower() for tag in tags)).to_dict())
 
         profiles = []
 
@@ -83,33 +82,20 @@ class MovieRecommender:
 
     def build_tfidf_matrix(self):
         vectorizer = TfidfVectorizer(
-            stop_words="english",
+            stop_words="english", # risk att ta bort semantik (rapport)
             min_df=self.min_df,
             max_df=0.8,
             ngram_range=self.ngram_range,
-            lowercase=True,
+            lowercase=True, # risk pga olika teckenuppsättningar (rapport)
             sublinear_tf=True)
 
-        vectorizer.fit(self.movie_profiles_df["movie_profile"])
-        self.tfidf_matrix = vectorizer.transform(self.movie_profiles_df["movie_profile"])
+        self.tfidf_matrix = vectorizer.fit_transform(self.movie_profiles_df["movie_profile"])
         self.vectorizer = vectorizer
         return self.tfidf_matrix
 
     def build_lsa_matrix(self):
-        svd = TruncatedSVD(n_components=5000) # ändra till self.n_components? eller 115?
+        svd = TruncatedSVD(n_components=self.n_components)
         self.lsa_matrix = svd.fit_transform(self.tfidf_matrix)
-
-        ### DEBUG
-        cum = np.cumsum(svd.explained_variance_ratio_)
-        # hitta antal komponenter för t.ex. 0.6 förklaring
-        k = np.searchsorted(cum, 0.60) + 1
-        print("k for 60% variance:", k) ###
-        total_cum = np.sum(svd.explained_variance_ratio_)
-        print("cum_variance_for_current_n:", total_cum) ###
-        import matplotlib.pyplot as plt
-        plt.plot(cum); plt.xlabel("components"); plt.ylabel("cumulative variance"); plt.grid(True)
-        plt.savefig("cum_variance.png", dpi=150) #####
-
         self.svd = svd
         return self.lsa_matrix
 
@@ -219,12 +205,6 @@ class MovieRecommender:
             best = group.sort_values("hybrid_score", ascending=False).iloc[0]
             diversified_rows.append(best)
 
-        # Debug: vilka kluster valdes som "best per cluster"?
-        print("\nBLOCK 1\n:")
-        print("DEBUG selected clusters (best per cluster):")
-        for r in diversified_rows:
-            print(int(r["movieId"]), r["title"], "cluster_label:", int(r["cluster_label"]), "hybrid:", r["hybrid_score"])
-
         selected_ids = set([int(row["movieId"]) for row in diversified_rows])
         remaining = merged_df[~merged_df["movieId"].isin(selected_ids)].sort_values("hybrid_score", ascending=False)
 
@@ -233,11 +213,6 @@ class MovieRecommender:
                 break
             diversified_rows.append(row)
 
-        # DEBUG!!
-        print("\nBLOCK 2\n:")
-        print("DEBUG remaining top 10 (cluster_label, title, hybrid):")
-        print(remaining[["cluster_label","title","hybrid_score"]].head(10))
-
         result = pd.DataFrame(diversified_rows).sort_values("hybrid_score", ascending=False).reset_index(drop=True)
         result.index += 1
-        return result[["movieId", "title", "cluster_label", "conf_score", "colf_score", "hybrid_score"]].head(self.top_n) #clusterlabel
+        return result[["movieId", "title", "cluster_label", "conf_score", "colf_score", "hybrid_score"]].head(self.top_n)
