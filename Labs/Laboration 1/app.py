@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from rapidfuzz import process, fuzz
 from movie_recommender import MovieRecommender
+import requests
 
 if "input_disabled" not in st.session_state:
     st.session_state.input_disabled = True
@@ -91,12 +92,13 @@ def build_recommender():
 
 def get_combined_matches(query, all_titles):
     query_lower = query.lower()
-    substring_matches = [title for title in all_titles if query_lower in title.lower()][:10]
 
-    fuzzy_raw = process.extract(query, all_titles, scorer=fuzz.WRatio, limit=7)
-    fuzzy_matches = [match[0] for match in fuzzy_raw if match[1] >= 60]
+    prefix_matches = [title for title in all_titles if title.lower().startswith(query_lower)]
+    substring_matches = [title for title in all_titles if query_lower in title.lower()][:9]
+    fuzzy_raw = process.extract(query, all_titles, scorer=fuzz.WRatio, limit=10)
+    fuzzy_matches = [title for title, score, _ in fuzzy_raw if score >= 60]
 
-    combined = list(dict.fromkeys(substring_matches + fuzzy_matches))
+    combined = list(dict.fromkeys(prefix_matches + substring_matches + fuzzy_matches))
     return combined
 
 @st.cache_data
@@ -162,18 +164,33 @@ def show_media_for_recommendations(recs, media_map, per_row=3):
 
                 idx += 1
 
+def download_button_movies_enriched():
+    movies_enriched_csv = requests.get("https://www.dropbox.com/scl/fi/vegn87jr1l9z3rhnck1sb/movies_enriched.csv?rlkey=z4n7pfqbeh289ljogaty7w48a&st=8f6s1rwf&dl=1")
+    return movies_enriched_csv.content
+
+def download_button_media():
+    media_csv = requests.get("https://www.dropbox.com/scl/fi/fj74kjcllpax1s6yyh7ke/media.csv?rlkey=sytnldw1lbiejzcyok5mtyrz8&st=5zr2a6vd&dl=1")
+    return media_csv.content
+
 st.set_page_config(layout="wide")
 st.markdown("""<style>.block-container {padding-top: 2rem;padding-botton: 0rem;padding-left: 1rem; padding-right: 1rem;}</style>""", unsafe_allow_html=True)
 
 header = st.container()
 with header:
     st.title("🎬 Movie Recommender")
-    st.info("Search for a movie and recieve recommendations.")
+    st.info("Search for a movie and recieve recommendations including posters & trailers.")
 
 col1, col2, col3 = st.columns([0.7,0.8,1.2])
 
 with col1:
     st.subheader("Step 1: Upload csv-files", divider="blue")
+    download_col1, download_col2, download_col3 = st.columns([0.20,0.50,0.30], gap="xxsmall", vertical_alignment="center")
+    with download_col1:
+        st.caption("Download: ", width="content")
+    with download_col2:
+        st.download_button("movies_enriched", width="stretch", data=download_button_movies_enriched, file_name="movies_enriched.csv", mime="text/csv", on_click="ignore", type="secondary", icon="💾")
+    with download_col3:
+        st.download_button("media", width="stretch", data=download_button_media, file_name="media.csv", mime="text/csv", on_click="ignore", type="secondary", icon="💾")
 
     movies_and_media = st.file_uploader("Upload enriched/extras: :primary[**movies_enriched.csv**], :primary[**media.csv**]:", type="csv", accept_multiple_files=True, key="movies_and_media")
     original_csvs = st.file_uploader("Upload original files: :blue[**ratings.csv**], :blue[**tags.csv**], :blue[**links.csv**]:", type="csv", accept_multiple_files=True, key="original_csvs")
@@ -188,7 +205,7 @@ with col1:
             "Contains poster and YouTube URL:s."]}, 
             index=[1, 2, 3, 4, 5])
     
-    if len(movies_and_media) < 2:
+    if len(movies_and_media+original_csvs) < 2:
         st.table(csv_table)
 
 if st.session_state.input_disabled and movies_and_media and original_csvs:
@@ -206,7 +223,7 @@ with col2:
     st.warning("Re-train the model if you change the hyperparameters.")
     diversify = st.radio(":rainbow[Diversify] recommendations?", ["Yes", "No"], key="diversify")
     if st.session_state.diversify == "Yes":
-        n_clusters = st.slider("🫧 How many clusters do you want to get recommendations from?", 1, 10, 4, key="n_clusters", help="Clusters the data with :green[KMeans] and chooses one movie from each cluster.")
+        n_clusters = st.slider("🫧 How many clusters do you want to get recommendations from?", 1, 10, 4, key="n_clusters", help="Clusters the data with :green[KMeans] and selects at least one movie from each cluster.")
 
     top_n = st.slider("🍿 How many recommendations do you want?", 1, 10, 5, key="top_n")
     n_components = st.slider("⚙️ Set the number of features for the LSA matrix.", 50, 1000, 115, step=5, key="n_components", help=":green[TruncatedSVD] reduces the dimensions from the TF-IDF matrix to this value.")
@@ -295,5 +312,5 @@ recs = st.session_state.get("last_recs", pd.DataFrame())
 media_map = st.session_state.get("media_map", {})
 
 if recs is not None:
-    st.subheader("Step 4: Trailers & posters for recommended movies", divider="blue")
+    st.subheader("Step 4: Trailers, posters & metadata for recommended movies", divider="blue")
     show_media_for_recommendations(recs, media_map)
