@@ -14,9 +14,9 @@ class MovieRecommender:
                  ngram_range=(1,3), 
                  n_components=115, 
                  top_n=5, 
-                 alpha=0.04, 
+                 alpha=0.2, 
                  diversify=True, 
-                 n_clusters=2):
+                 n_clusters=4):
         
         self.movies_df = None
         self.ratings_df = None
@@ -41,11 +41,22 @@ class MovieRecommender:
         self.user_map = None
         self.item_map = None
 
+    def normalize_title(self, title):
+        if ", The" in title:
+            return "The " + title.replace(", The", "")
+        if ", A" in title:
+            return "A " + title.replace(", A", "")
+        if ", An" in title:
+            return "An " + title.replace(", An", "")
+        return title
+
     def load_data(self, movies_df, ratings_df, tags_df, links_df):
         self.movies_df = movies_df.copy().reset_index(drop=True)
         self.ratings_df = ratings_df.copy()
         self.tags_df = tags_df.copy()
         self.links_df = links_df.copy()
+
+        self.movies_df["title"] = (self.movies_df["title"].apply(self.normalize_title))
         return self
 
     def build_movie_profile(self):
@@ -103,14 +114,13 @@ class MovieRecommender:
         self.item_map = {movieId: idx for idx, movieId in enumerate(self.movies_df["movieId"])}
         self.ratings_df = self.ratings_df[self.ratings_df["movieId"].isin(self.item_map.keys())].copy()
 
-        user_codes = self.ratings_df["userId"].astype("category").cat.codes
+        user_ids = self.ratings_df["userId"].astype("category").cat.codes
         user_categories = self.ratings_df["userId"].astype("category").cat.categories
         self.user_map = dict(zip(user_categories, range(len(user_categories))))
 
-        item_codes = self.ratings_df["movieId"].map(self.item_map).values
+        item_ids = self.ratings_df["movieId"].map(self.item_map).values
         rating_values = self.ratings_df["rating"].values
-
-        self.user_item_matrix = coo_matrix((rating_values, (user_codes, item_codes))).tocsr()
+        self.user_item_matrix = coo_matrix((rating_values, (user_ids, item_ids))).tocsr()
         return self.user_item_matrix
     
     def get_conf_recommendations(self, movie_index, n_candidates=200):
@@ -195,7 +205,7 @@ class MovieRecommender:
         n_candidates = vectors.shape[0]
         n_clusters_eff = min(self.n_clusters, max(1, n_candidates))
 
-        kmeans = KMeans(n_clusters=n_clusters_eff, random_state=42) # RANDOM STATE!
+        kmeans = KMeans(n_clusters=n_clusters_eff)
         labels = kmeans.fit_predict(vectors)
         merged_df["cluster_label"] = labels
 
