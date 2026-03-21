@@ -21,6 +21,8 @@ if "last_recs" not in st.session_state:
 
 @st.cache_resource
 def load_recommender(movies_enriched, ratings, tags, links, top_n, alpha, n_components, n_clusters=None, diversify=False):
+    """ Build and initialize a MovieRecommender instance using uploaded CSV files and run the full training pipeline. """
+
     recommender = MovieRecommender(
         top_n=top_n,
         alpha=alpha,
@@ -30,6 +32,8 @@ def load_recommender(movies_enriched, ratings, tags, links, top_n, alpha, n_comp
 
     progress.update(label="Loading data...")
     recommender.load_data(movies_enriched, ratings, tags, links)
+    progress.update(label="Preprocessing data...")
+    recommender.preprocess_data()
     progress.update(label="Building movie profiles...")
     recommender.build_movie_profile()
     progress.update(label="Building TF-IDF matrix...")
@@ -42,28 +46,15 @@ def load_recommender(movies_enriched, ratings, tags, links, top_n, alpha, n_comp
     return recommender
 
 def build_recommender():
+    """ Read and validate uploaded CSV files and train a new recommender model based on the selected hyperparameters. Then store the trained model in session state. """
+
     diversify_choice = st.session_state["diversify"]
     diversify_bool = True if diversify_choice == "Yes" else False
 
     movies_and_media = st.session_state.get("movies_and_media")
+    media_df, movies_enriched = (pd.read_csv(file) for file in movies_and_media)
     original_csvs = st.session_state.get("original_csvs")
-
-    if movies_and_media:
-        movies_and_media = sorted(movies_and_media, key=lambda file: file.name.lower())
-        if len(movies_and_media) == 2:
-            try:
-                media_df, movies_enriched = (pd.read_csv(file) for file in movies_and_media)
-            except Exception as e:
-                st.warning(f"Error reading movies_enriched.csv and/or media.csv: {e}")
-                media_df = None
-
-    if original_csvs:
-        original_csvs = sorted(original_csvs, key=lambda file: file.name.lower())
-        if len(original_csvs) == 3:
-            try:
-                links, ratings, tags = (pd.read_csv(file) for file in original_csvs) 
-            except Exception as e:
-                st.warning(f"Error reading links.csv, ratings.csv and/or tags.csv: {e}")
+    links, ratings, tags = (pd.read_csv(file) for file in original_csvs)
 
     if media_df is not None:
         media_map, missing = load_media(media_df)
@@ -91,22 +82,30 @@ def build_recommender():
     st.session_state.input_disabled = False
 
 def get_combined_matches(query, all_titles):
-    query_lower = query.lower()
+    """ Return a combined list of matching movie titles using normalization, prefix matching, substring matching, and fuzzy matching. """
 
-    prefix_matches = [title for title in all_titles if title.lower().startswith(query_lower)]
-    substring_matches = [title for title in all_titles if query_lower in title.lower()][:9]
-    fuzzy_raw = process.extract(query, all_titles, scorer=fuzz.WRatio, limit=10)
-    fuzzy_matches = [title for title, score, _ in fuzzy_raw if score >= 60]
+    query_normalized = query.lower().replace("&", "and")
+    if not query_normalized.strip():
+        return []
+    normalized_titles = [(title, title.lower().replace("&", "and")) for title in all_titles]
+
+    prefix_matches = [title for title, title_normalized in normalized_titles if title_normalized.startswith(query_normalized)]
+    substring_matches = [title for title, title_normalized in normalized_titles if query_normalized in title_normalized][:9]
+    fuzzy_raw = process.extract(query_normalized, [title_normalized for _, title_normalized in normalized_titles], scorer=fuzz.WRatio, limit=10)
+    fuzzy_matches = [all_titles[id] for (_, score, id) in fuzzy_raw if score >= 60]
 
     combined = list(dict.fromkeys(prefix_matches + substring_matches + fuzzy_matches))
     return combined
 
-@st.cache_data
 def load_media(df):
+    """ Convert the media.csv file into a dictionary mapping movieId to metadata such as poster and YouTube trailer URL:s. """
+
     media_map = {int(row["movieId"]): row.to_dict() for _, row in df.iterrows()}
     return media_map, set()
 
 def show_media_for_recommendations(recs, media_map, per_row=3):
+    """ Display posters, trailers, and metadata for each recommended movie. """
+
     recommender = st.session_state.get("recommender")
     movies_df = getattr(recommender, "movies_df", None)
     movie_profile = {}
@@ -165,11 +164,15 @@ def show_media_for_recommendations(recs, media_map, per_row=3):
                 idx += 1
 
 def download_button_movies_enriched():
-    movies_enriched_csv = requests.get("https://www.dropbox.com/scl/fi/vegn87jr1l9z3rhnck1sb/movies_enriched.csv?rlkey=z4n7pfqbeh289ljogaty7w48a&st=8f6s1rwf&dl=1")
+    """ Download the movies_enriched.csv file from a predefined Dropbox link. Contains original movies.csv metadata + plot/overview, keywords, director, cast and some of the missing genres. """
+
+    movies_enriched_csv = requests.get("https://www.dropbox.com/scl/fi/vegn87jr1l9z3rhnck1sb/movies_enriched.csv?rlkey=wrci5hsqv08kkcctgaarqh54r&st=8u317zoi&dl=1")
     return movies_enriched_csv.content
 
 def download_button_media():
-    media_csv = requests.get("https://www.dropbox.com/scl/fi/fj74kjcllpax1s6yyh7ke/media.csv?rlkey=sytnldw1lbiejzcyok5mtyrz8&st=5zr2a6vd&dl=1")
+    """ Download the media.csv file from a predefined Dropbox link. Contains poster URLs and YouTube trailer links for movies. """
+
+    media_csv = requests.get("https://www.dropbox.com/scl/fi/fj74kjcllpax1s6yyh7ke/media.csv?rlkey=d0hzhmfxszyyk5l7xd462avwe&st=m9y3tccr&dl=1")
     return media_csv.content
 
 st.set_page_config(layout="wide")
@@ -184,31 +187,62 @@ col1, col2, col3 = st.columns([0.7,0.8,1.2])
 
 with col1:
     st.subheader("Step 1: Upload csv-files", divider="blue")
-    download_col1, download_col2, download_col3 = st.columns([0.20,0.50,0.30], gap="xxsmall", vertical_alignment="center")
+    download_col1, download_col2, download_col3 = st.columns([0.20,0.30,0.50], gap="xxsmall", vertical_alignment="center")
     with download_col1:
         st.caption("Download: ", width="content")
     with download_col2:
-        st.download_button("movies_enriched", width="stretch", data=download_button_movies_enriched, file_name="movies_enriched.csv", mime="text/csv", on_click="ignore", type="secondary", icon="💾")
-    with download_col3:
         st.download_button("media", width="stretch", data=download_button_media, file_name="media.csv", mime="text/csv", on_click="ignore", type="secondary", icon="💾")
+    with download_col3:
+        st.download_button("movies_enriched", width="stretch", data=download_button_movies_enriched, file_name="movies_enriched.csv", mime="text/csv", on_click="ignore", type="secondary", icon="💾")
 
-    movies_and_media = st.file_uploader("Upload enriched/extras: :primary[**movies_enriched.csv**], :primary[**media.csv**]:", type="csv", accept_multiple_files=True, key="movies_and_media")
-    original_csvs = st.file_uploader("Upload original files: :blue[**ratings.csv**], :blue[**tags.csv**], :blue[**links.csv**]:", type="csv", accept_multiple_files=True, key="original_csvs")
+    movies_and_media = st.file_uploader("Upload enriched/extras: :primary[**media.csv**], :primary[**movies_enriched.csv**]:", type="csv", accept_multiple_files=True, key="movies_and_media")
+    warning_placeholder1 = st.empty()
+    original_csvs = st.file_uploader("Upload original files: :blue[**links.csv**], :blue[**ratings.csv**], :blue[**tags.csv**]:", type="csv", accept_multiple_files=True, key="original_csvs")
+    warning_placeholder2 = st.empty()
+
+    media_df = None
+    movies_and_media_is_ok, original_is_ok = False, False
+
+    valid_media_names = ["media.csv", "movies_enriched.csv"]
+    if movies_and_media:
+        movies_and_media = sorted(movies_and_media, key=lambda file: file.name.lower())
+        if len(movies_and_media) == 2 and all(file.name in valid_media_names for file in movies_and_media):
+            movies_and_media_is_ok = True
+        elif len(movies_and_media) == 1 and movies_and_media[0].name not in valid_media_names:
+            warning_placeholder1.error(f"Error: names must match 'media.csv' and 'movies_enriched.csv'.")
+        elif len(movies_and_media) == 2 and any(file.name not in valid_media_names for file in movies_and_media):
+            warning_placeholder1.error(f"Error: names must match 'media.csv' and 'movies_enriched.csv'.")
+        elif len(movies_and_media) > 2:
+            warning_placeholder1.error(f"Error: you have uploaded too many files ({len(movies_and_media)}).")
+
+    valid_original_names = ["links.csv", "ratings.csv", "tags.csv"]
+    if original_csvs:
+        original_csvs = sorted(original_csvs, key=lambda file: file.name.lower())
+        if len(original_csvs) == 3 and all(f.name in valid_original_names for f in original_csvs):
+            original_is_ok = True
+        elif len(original_csvs) == 1 and original_csvs[0].name not in valid_original_names:
+            warning_placeholder2.error("Error: names must match 'links.csv', 'ratings.csv' and 'tags.csv'.")
+        elif len(original_csvs) == 2 and any(f.name not in valid_original_names for f in original_csvs):
+            warning_placeholder2.error("Error: names must match 'links.csv', 'ratings.csv' and 'tags.csv'.")
+        elif len(original_csvs) == 3 and any(f.name not in valid_original_names for f in original_csvs):
+            warning_placeholder2.error("Error: names must match 'links.csv', 'ratings.csv' and 'tags.csv'.")
+        elif len(original_csvs) > 3:
+            warning_placeholder2.error(f"Error: you have uploaded too many files ({len(original_csvs)}).")
 
     csv_table = pd.DataFrame({
-        "File": ["**movies_enriched.csv**", "**ratings.csv**", "**tags.csv**", "**links.csv**", "**media.csv**"], 
+        "File": ["**media.csv**", "**movies_enriched.csv**", "**links.csv**", "**ratings.csv**", "**tags.csv**"], 
         "Comment": [
-            "The movies.csv enriched with movie plot, director, cast & keywords + some of the missing genres.", 
-            "The original ratings.csv.", 
-            "The original tags.csv.", 
+            "Contains poster and YouTube URL:s.", 
+            "The movies.csv enriched with movie plot, director, cast & keywords + some of the missing genres.",  
             "The original links.csv.", 
-            "Contains poster and YouTube URL:s."]}, 
+            "The original ratings.csv.", 
+            "The original tags.csv."]}, 
             index=[1, 2, 3, 4, 5])
     
     if len(movies_and_media+original_csvs) < 2:
         st.table(csv_table)
 
-if st.session_state.input_disabled and movies_and_media and original_csvs:
+if st.session_state.input_disabled and movies_and_media_is_ok and original_is_ok:
     st.session_state.button_disabled = False
 
 with col2:
@@ -217,23 +251,23 @@ with col2:
         "n_clusters": 4,
         "top_n": 5,
         "n_components": 115,
-        "alpha": 0.2}
+        "alpha": 0.8}
 
     st.subheader("Step 2: Set hyperparameters", divider="blue")
     st.warning("Re-train the model if you change the hyperparameters.")
     diversify = st.radio(":rainbow[Diversify] recommendations?", ["Yes", "No"], key="diversify")
     if st.session_state.diversify == "Yes":
-        n_clusters = st.slider("🫧 How many clusters do you want to get recommendations from?", 1, 10, 4, key="n_clusters", help="Clusters the data with :green[KMeans] and selects at least one movie from each cluster.")
+        n_clusters = st.slider("🫧 How many clusters do you want to get recommendations from?", 2, 30, default_hp["n_clusters"], key="n_clusters", help="Clusters the data with :green[KMeans] and selects at least one movie from each cluster (up to # of recommendations).")
 
-    top_n = st.slider("🍿 How many recommendations do you want?", 1, 10, 5, key="top_n")
-    n_components = st.slider("⚙️ Set the number of features for the LSA matrix.", 50, 1000, 115, step=5, key="n_components", help=":green[TruncatedSVD] reduces the dimensions from the TF-IDF matrix to this value.")
+    top_n = st.slider("🍿 How many recommendations do you want?", 1, 10, default_hp["top_n"], key="top_n")
+    n_components = st.slider("⚙️ Set the number of features for the LSA matrix.", 50, 1000, default_hp["n_components"], step=5, key="n_components", help=":green[TruncatedSVD] reduces the dimensions from the TF-IDF matrix to this value.")
     if 200 < n_components < 500:
         st.warning("200+ features: grab a coffee, this might take a while.", icon="🧋")
     elif n_components >= 500:
         st.error("500+ features: your CPU will need a vacation after this.", icon="⛱️")
     else:
         pass
-    alpha = st.slider("⚖️ Set the balance between content & collaborative filtering.", 0.0, 1.0, 0.4, step=0.01, key="alpha", help=":green[alpha = 0.0]: collaborative filtering, :green[alpha = 1.0]: content filtering")
+    alpha = st.slider("⚖️ Set the balance between collaborative & content-based filtering.", 0.0, 1.0, default_hp["alpha"], step=0.01, key="alpha", help=":green[alpha = 0.0]: collaborative filtering, :green[alpha = 1.0]: content filtering")
     
     button_container = st.container(horizontal=True, horizontal_alignment="distribute")
     with button_container:
@@ -296,7 +330,7 @@ with col3:
             st.dataframe(recs, column_config={
                 "movieId": "Movie ID", 
                 "title": "Title", 
-                "cluster_label": "Cluster no.", 
+                "cluster_label": "Cluster #", 
                 "conf_score": "Content score", 
                 "colf_score": "Collab. score", 
                 "hybrid_score": "𝗛𝘆𝗯𝗿𝗶𝗱 𝘀𝗰𝗼𝗿𝗲"})
@@ -311,6 +345,6 @@ with col3:
 recs = st.session_state.get("last_recs", pd.DataFrame())
 media_map = st.session_state.get("media_map", {})
 
+st.subheader("Step 4: Trailers, posters & metadata for recommended movies", divider="blue")
 if recs is not None:
-    st.subheader("Step 4: Trailers, posters & metadata for recommended movies", divider="blue")
     show_media_for_recommendations(recs, media_map)
