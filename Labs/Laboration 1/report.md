@@ -122,8 +122,8 @@ I projektet valdes en hybridmodell som kombinerar:
 
 Den content‑baserade modellen gav semantiskt lika rekommendationer, medan collaborative-modellen fångade användarnas preferenser. Hybridmodellen kombinerade styrkorna från båda och gav de mest relevanta rekommendationerna. Alpha-värdet viktade hybridmodellen och gav därmed olika rekommendationer vid olika alpha-värden. Se exempel för filmen *Toy Story (1995)* i tabellen nedan:
 
-| **#**     | **alpha=0.0**                                     | **alpha=0.5**                     | **alpha=1.0**                                     |
-| :---: | :---                                          | :---                          | :---                                          |
+| **#**     | **alpha=0.0**                                 | **alpha=0.5**                 | **alpha=1.0**                                 |
+| :---:     | :---                                          | :---                          | :---                                          |
 | **1**     | Toy Story 2 (1999)                            | Toy Story 2 (1999)            | Toy Story 2 (1999)                            |
 | **2**     | Star Wars: Episode IV (1977)                  | Monsters, Inc. (2001)         | Toy Story 3 (2010)                            |
 | **3**     | Independence Day (1996)                       | The Incredibles (2004)        | Ice Age (2002)                                |
@@ -133,7 +133,16 @@ Den content‑baserade modellen gav semantiskt lika rekommendationer, medan coll
 <br>
 
 **Diversifiering**<br>
-Diversifiering ökade variationen bland rekommendationerna utan att försämra relevansen och omfattade filmer från olika genrer eller stilar, men med tydlig koppling till den film som användaren matade in. För "sann" diversifiering så var det lämpligt att sätta `n_clusters >= top_n` då detta innebar att **varje** rekommendation togs från ett eget unikt kluster *(se illustration nedan)*.
+Diversifiering ökade variationen bland rekommendationerna utan att försämra relevansen och omfattade filmer från olika genrer eller stilar, men med tydlig koppling till den film som användaren matade in. För "sann" diversifiering så var det lämpligt att sätta `n_clusters >= top_n` då detta innebar att **varje** rekommendation togs från ett eget unikt kluster *(se illustration längre ner i rapporten)*. I tabellen nedan jämförs rekommendationerna för *Toy Story (1995)* med och utan diversifiering (`alpha=0.8`):
+
+
+| **#**     | **Med diversifiering**                     | **Utan diversifiering** |
+| :---:     | :---                                       | :---                    |
+| **1**     | Toy Story 2 (1999)                         | Toy Story 2 (1999)      |
+| **2**     | Ice Age (2002)                             | Toy Story 3 (2010)      |
+| **3**     | Bedtime Stories (2008)                     | Ice Age (2002)          |
+| **4**     | Forrest Gump (1994)                        | Up (2009)               |
+| **5**     | Willy Wonka & the Chocolate Factory (1971) | Toy Story 4 (2019)      |
 
 <br>
 
