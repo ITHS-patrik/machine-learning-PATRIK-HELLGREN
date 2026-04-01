@@ -193,9 +193,9 @@ with col1:
     with download_col1:
         st.caption("Download: ", width="content")
     with download_col2:
-        st.download_button("enriched", width="stretch", data=download_button_enriched(), file_name="enriched.zip", mime="application/zip", on_click="ignore", type="secondary", icon="💾")
+        st.download_button("enriched", width="stretch", data=download_button_enriched, file_name="enriched.zip", mime="application/zip", on_click="ignore", type="secondary", icon="💾")
     with download_col3:
-        st.download_button("original", width="stretch", data=download_button_original(), file_name="original.zip", mime="application/zip", on_click="ignore", type="secondary", icon="💾")
+        st.download_button("original", width="stretch", data=download_button_original, file_name="original.zip", mime="application/zip", on_click="ignore", type="secondary", icon="💾")
 
     movies_and_media = st.file_uploader("Upload enriched/extras: :primary[**media.csv**], :primary[**movies_enriched.csv**]:", type="csv", accept_multiple_files=True, key="movies_and_media")
     warning_placeholder1 = st.empty()
