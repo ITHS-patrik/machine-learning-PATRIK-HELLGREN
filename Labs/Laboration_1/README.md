@@ -4,6 +4,17 @@ En interaktiv rekommendationsmotor byggd med bland annat **Python**, **scikit‑
 Projektet låter användaren ladda upp (delvis berikad) MovieLens‑data, ställa in hyperparametrar och generera personliga filmrekommendationer baserat på både **content** och/eller **collaborative filtering**. Utöver detta så visar applikationen även tillhörande poster, trailer och metadata för vardera rekommendation.
 <br><br>
 
+## ⏱️ Snabbstart
+Börja med att ladda ner och packa upp datasetet **MovieLens 32M** från länken nedan:
+                
+                https://grouplens.org/datasets/movielens/
+
+Gå sedan till den deployade versionen av applikationen via länken nedan:
+
+                https://movie-recommender-ultra.streamlit.app
+
+<br>
+
 ## 🧬 Funktionalitet
 
 
