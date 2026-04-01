@@ -163,17 +163,17 @@ def show_media_for_recommendations(recs, media_map, per_row=3):
 
                 idx += 1
 
-def download_button_movies_enriched():
-    """ Download the movies_enriched.csv file from a predefined Dropbox link. Contains original movies.csv metadata + plot/overview, keywords, director, cast and some of the missing genres. """
+def download_button_enriched():
+    """ Download a zip-file containing media.csv and movies_enriched.csv from a predefined Dropbox link. """
 
-    movies_enriched_csv = requests.get("https://www.dropbox.com/scl/fi/vegn87jr1l9z3rhnck1sb/movies_enriched.csv?rlkey=wrci5hsqv08kkcctgaarqh54r&st=8u317zoi&dl=1")
-    return movies_enriched_csv.content
+    enriched = requests.get("https://www.dropbox.com/scl/fi/2j080i4x5mu38qvqzl6mq/enriched.zip?rlkey=hwsfimn7snz6or6xxufsfq3xr&st=hrx615x5&dl=1")
+    return enriched.content
 
-def download_button_media():
-    """ Download the media.csv file from a predefined Dropbox link. Contains poster URLs and YouTube trailer links for movies. """
+def download_button_original():
+    """ Download a zip-file containing links.csv, tags.csv and ratings.csv from a predefined Dropbox link. """
 
-    media_csv = requests.get("https://www.dropbox.com/scl/fi/fj74kjcllpax1s6yyh7ke/media.csv?rlkey=d0hzhmfxszyyk5l7xd462avwe&st=m9y3tccr&dl=1")
-    return media_csv.content
+    original = requests.get("https://www.dropbox.com/scl/fi/sqvyooac4mvbq1m6kv9kc/original.zip?rlkey=tsloney2y0cjtljyro0bzyzzs&st=oyb7d53w&dl=1")
+    return original.content
 
 st.set_page_config(layout="wide")
 st.markdown("""<style>.block-container {padding-top: 2rem;padding-botton: 0rem;padding-left: 1rem; padding-right: 1rem;}</style>""", unsafe_allow_html=True)
@@ -187,13 +187,13 @@ col1, col2, col3 = st.columns([0.7,0.8,1.2])
 
 with col1:
     st.subheader("Step 1: Upload csv-files", divider="blue")
-    download_col1, download_col2, download_col3 = st.columns([0.20,0.30,0.50], gap="xxsmall", vertical_alignment="center")
+    download_col1, download_col2, download_col3 = st.columns([0.20,0.40,0.40], gap="xxsmall", vertical_alignment="center")
     with download_col1:
         st.caption("Download: ", width="content")
     with download_col2:
-        st.download_button("media", width="stretch", data=download_button_media, file_name="media.csv", mime="text/csv", on_click="ignore", type="secondary", icon="💾")
+        st.download_button("enriched", width="stretch", data=download_button_enriched, file_name="enriched.zip", mime="application/zip", on_click="ignore", type="secondary", icon="💾")
     with download_col3:
-        st.download_button("movies_enriched", width="stretch", data=download_button_movies_enriched, file_name="movies_enriched.csv", mime="text/csv", on_click="ignore", type="secondary", icon="💾")
+        st.download_button("original", width="stretch", data=download_button_original, file_name="original.zip", mime="application/zip", on_click="ignore", type="secondary", icon="💾")
 
     movies_and_media = st.file_uploader("Upload enriched/extras: :primary[**media.csv**], :primary[**movies_enriched.csv**]:", type="csv", accept_multiple_files=True, key="movies_and_media")
     warning_placeholder1 = st.empty()
