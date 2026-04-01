@@ -5,13 +5,10 @@ Projektet låter användaren ladda upp (delvis berikad) MovieLens‑data, ställ
 <br><br>
 
 ## ⏱️ Snabbstart
-Börja med att ladda ner och packa upp datasetet **MovieLens 32M** från länken nedan:
-                
-                https://grouplens.org/datasets/movielens/
 
-Gå sedan till den deployade versionen av applikationen via länken nedan:
+Gå direkt till den deployade versionen av applikationen via länken nedan. Där finns även länkar för att ladda ner de filer som behövs.
 
-                https://movie-recommender-ultra.streamlit.app
+        https://movie-recommender-ultra.streamlit.app
 
 <br>
 
