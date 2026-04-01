@@ -207,16 +207,19 @@ marimo/_lsp/
 __marimo__/
 
 # DATA
-Data/
+/Data
 debug_test/
+Labs/Laboration_1/data/
 
 # NOTES
-Labs/Laboration 1/PM.pdf
+Labs/Laboration_1/PM.pdf
 Labs/Rapport_skrivning.txt
-Labs/Laboration 1/README_license.md
+Labs/Laboration_1/README_license.md
+Labs/Laboration_2/AI25-Assignment2-ML.pdf
 
 # OTHER
 Explorations/
 backups/
 cache/
 other/
+Laboration 2/
