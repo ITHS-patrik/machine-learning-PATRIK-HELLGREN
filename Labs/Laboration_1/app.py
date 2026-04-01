@@ -163,14 +163,12 @@ def show_media_for_recommendations(recs, media_map, per_row=3):
 
                 idx += 1
 
-@st.cache_data
 def download_button_enriched():
     """ Download a zip-file containing media.csv and movies_enriched.csv from a predefined Dropbox link. """
 
     enriched = requests.get("https://www.dropbox.com/scl/fi/2j080i4x5mu38qvqzl6mq/enriched.zip?rlkey=hwsfimn7snz6or6xxufsfq3xr&st=hrx615x5&dl=1")
     return enriched.content
 
-@st.cache_data
 def download_button_original():
     """ Download a zip-file containing links.csv, tags.csv and ratings.csv from a predefined Dropbox link. """
 
@@ -195,7 +193,7 @@ with col1:
     with download_col2:
         st.download_button("enriched", width="stretch", data=download_button_enriched, file_name="enriched.zip", mime="application/zip", on_click="ignore", type="secondary", icon="💾")
     with download_col3:
-        st.download_button("original", width="stretch", data=download_button_original, file_name="original.zip", mime="application/zip", on_click="ignore", type="secondary", icon="💾")
+        st.download_button("originals", width="stretch", data=download_button_original, file_name="original.zip", mime="application/zip", on_click="ignore", type="secondary", icon="💾")
 
     movies_and_media = st.file_uploader("Upload enriched/extras: :primary[**media.csv**], :primary[**movies_enriched.csv**]:", type="csv", accept_multiple_files=True, key="movies_and_media")
     warning_placeholder1 = st.empty()
