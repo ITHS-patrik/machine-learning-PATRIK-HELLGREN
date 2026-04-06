@@ -181,7 +181,7 @@ st.markdown("""<style>.block-container {padding-top: 2rem;padding-botton: 0rem;p
 header = st.container()
 with header:
     st.title("🎬 Movie Recommender")
-    st.info("Search for a movie and recieve recommendations including posters & trailers.")
+    st.info("Input a movie title and receive recommendations including posters & trailers.")
 
 col1, col2, col3 = st.columns([0.7,0.8,1.2])
 
@@ -292,7 +292,7 @@ with col2:
         st.button("Reset values", type="secondary", icon="🔄️", key="reset_defaults", on_click=reset_defaults)
 
 with col3:
-    st.subheader("Step 3: Recieve recommendations", divider="blue")
+    st.subheader("Step 3: Receive recommendations", divider="blue")
     query = st.text_input("Input the title of a movie you like:", icon="🎞️", disabled=st.session_state.input_disabled)
 
     if st.session_state.recommender and query:
